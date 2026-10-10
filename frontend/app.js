@@ -384,7 +384,8 @@ function renderResults(data) {
   } else {
     if (data.is_lookalike_pair) {
       title.textContent = "Quarry Sibling Lookalike (Correctly Rejected)";
-      desc.textContent = data.lookalike_reason || "Sibling slabs cut from adjacent quarry blocks share color and texture ('family resemblance'), but differing vein topology proves they are separate physical pieces. Zero lookalike false acceptance enforced.";
+      const famPrefix = data.stone_family ? `[Stone Family: ${data.stone_family}] ` : "";
+      desc.textContent = famPrefix + (data.lookalike_reason || "Sibling slabs cut from adjacent quarry blocks share color and texture ('family resemblance'), but differing vein topology proves they are separate physical pieces. Zero lookalike false acceptance enforced.");
     } else {
       title.textContent = data.is_auto_matched ? "No Inventory Match" : "Different Physical Piece";
       desc.textContent = "No consistent planar homography found. Rejected as unrelated stone or lookalike.";

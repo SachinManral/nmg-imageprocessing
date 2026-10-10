@@ -3,11 +3,11 @@
 [![Python Version](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
 [![OpenCV](https://img.shields.io/badge/OpenCV-4.8%2B-5C3EE8.svg)](https://opencv.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.100%2B-009688.svg)](https://fastapi.tiangolo.com/)
-[![Accuracy](https://img.shields.io/badge/Benchmark%20Accuracy-100%25-success.svg)](#benchmark-performance--validation)
+[![Benchmark Accuracy](https://img.shields.io/badge/Benchmark%20Accuracy-100%25-success.svg)](#benchmark-performance--validation)
 [![Lookalike FAR](https://img.shields.io/badge/Lookalike%20FAR-0.0%25-brightgreen.svg)](#benchmark-performance--validation)
-[![Air-Gapped](https://img.shields.io/badge/Architecture-100%25%20Offline-orange.svg)](#architectural-overview)
+[![Architecture](https://img.shields.io/badge/Architecture-100%25%20Offline-orange.svg)](#system-architecture--pipeline-flow)
 
-A robust, offline computer vision pipeline engineered to verify whether two photographs depict the **exact same physical stone slab** across complex photometric and geometric transformations (rotations, scale changes, oblique viewpoints, non-uniform glare, and up to 55% partial occlusion).
+A robust, offline computer vision system engineered to verify whether two photographs depict the **exact same physical stone slab** across complex photometric and geometric transformations (rotations, scale changes, oblique viewpoints, non-uniform glare, and up to 55% partial occlusion).
 
 The system solves the high-stakes **"Fingerprint vs. Family Resemblance"** challenge in stone logistics: distinguishing identical slabs from sibling slabs quarried inches apart from the same block (**lookalikes**), enforcing zero false acceptances while operating with low latency.
 
@@ -16,24 +16,26 @@ The system solves the high-stakes **"Fingerprint vs. Family Resemblance"** chall
 ## Table of Contents
 
 - [The Core Challenge: Fingerprint vs. Family Resemblance](#the-core-challenge-fingerprint-vs-family-resemblance)
-- [Architectural Overview](#architectural-overview)
+- [System Architecture & Pipeline Flow](#system-architecture--pipeline-flow)
+- [Verification Decision Logic & Lookalike Rejection](#verification-decision-logic--lookalike-rejection)
 - [Pipeline Engineering & Mathematical Foundations](#pipeline-engineering--mathematical-foundations)
-  - [1. Preprocessing & CLAHE Ablation](#1-preprocessing--clahe-ablation)
-  - [2. Feature Extraction: Low-Threshold SIFT](#2-feature-extraction-low-threshold-sift)
+  - [1. Image Ingestion & CLAHE Ablation](#1-image-ingestion--clahe-ablation)
+  - [2. Feature Detection: Low-Threshold SIFT](#2-feature-detection-low-threshold-sift)
   - [3. Hellinger Kernel: RootSIFT Formulation](#3-hellinger-kernel-rootsift-formulation)
   - [4. Ambiguity Filtering: Lowe's Ratio Test](#4-ambiguity-filtering-lowes-ratio-test)
-  - [5. Planar Homography & USAC_MAGSAC](#5-planar-homography--usac_magsac)
+  - [5. Planar Homography: USAC_MAGSAC Consensus](#5-planar-homography-usac_magsac-consensus)
   - [6. Spatial Coverage & Degeneracy Guard](#6-spatial-coverage--degeneracy-guard)
   - [7. Multi-Factor Scoring & Calibrated Triad Bands](#7-multi-factor-scoring--calibrated-triad-bands)
 - [Decision Triad & Classification Matrix](#decision-triad--classification-matrix)
+- [Benchmark Dataset Structure & Pair Mapping](#benchmark-dataset-structure--pair-mapping)
 - [Benchmark Performance & Validation](#benchmark-performance--validation)
 - [Repository Structure](#repository-structure)
 - [Quickstart Guide](#quickstart-guide)
-  - [1. Installation](#1-installation)
-  - [2. Single-Pair Verification CLI (`match.py`)](#2-single-pair-verification-cli-matchpy)
-  - [3. Batch Benchmark CLI (`evaluate.py`)](#3-batch-benchmark-cli-evaluatepy)
-  - [4. Parameter Ablation Study (`tune.py`)](#4-parameter-ablation-study-tunepy)
-  - [5. Interactive Web Dashboard & REST Server](#5-interactive-web-dashboard--rest-server)
+  - [1. Installation & Environment Setup](#1-installation--environment-setup)
+  - [2. Interactive Web Dashboard & REST Server](#2-interactive-web-dashboard--rest-server)
+  - [3. Single-Pair Verification CLI (`match.py`)](#3-single-pair-verification-cli-matchpy)
+  - [4. Batch Benchmark Evaluation CLI (`evaluate.py`)](#4-batch-benchmark-evaluation-cli-evaluatepy)
+  - [5. Parameter Ablation Study (`tune.py`)](#5-parameter-ablation-study-tunepy)
 - [REST API Reference](#rest-api-reference)
 - [Automated Test Suite](#automated-test-suite)
 - [Engineering Trade-offs & Failure Mode Analysis](#engineering-trade-offs--failure-mode-analysis)
@@ -42,23 +44,23 @@ The system solves the high-stakes **"Fingerprint vs. Family Resemblance"** chall
 
 ## The Core Challenge: Fingerprint vs. Family Resemblance
 
-Natural stones (e.g., Carrara marble, Statuario, Botticino, and Nero granite) present a unique computer vision hurdle:
+Natural stone (e.g., Carrara marble, Statuario, Botticino, Nero granite, Grey granite) poses a unique computer vision challenge:
 
-* **Family Resemblance (Sibling Lookalikes):** Slabs cut consecutively from the same quarried block share the exact same background mineral color, crystalline texture density, and general vein character. Standard deep neural network embeddings, histogram comparators, and bag-of-words models routinely fail here by declaring sibling pieces to be identical.
+* **Family Resemblance (Sibling Lookalikes):** Slabs cut consecutively from the same quarried block share identical background mineral color, crystalline texture density, and general vein character. Standard deep neural network embeddings, color histograms, and appearance models fail by declaring sibling pieces to be identical.
 * **Unique Fingerprint (Physical Slabs):** The micro-vein branching paths and natural fissures form a unique 2D planar fingerprint.
-* **The Goal:** Enforce strict planar homography consensus so that lookalikes (which lack identical vein geometry) are rejected with a **0.0% False Acceptance Rate (FAR)**, while genuine pairs are accepted across rotations, tilts, shadows, and partial occlusions.
+* **The Core Objective:** Enforce strict planar homography consensus so that lookalikes (which lack identical vein geometry) are rejected with a **0.0% False Acceptance Rate (FAR)**, while genuine pairs are verified across rotations, tilts, shadows, and partial occlusions.
 
 ---
 
-## Architectural Overview
+## System Architecture & Pipeline Flow
 
 The following diagram illustrates the complete end-to-end verification and evaluation architecture:
 
 ```mermaid
 flowchart TD
-    subgraph INGESTION["1. Image Ingestion & Preprocessing"]
-        ImgA["Image A (Reference / Catalog)"] --> PrepA["Aspect-Preserving Resize (Max 1024px)<br/>Grayscale Conversion"]
-        ImgB["Image B (Query / Inspection)"] --> PrepB["Aspect-Preserving Resize (Max 1024px)<br/>Grayscale Conversion"]
+    subgraph INGESTION["1. Ingestion & Preprocessing"]
+        ImgA["Image A (Reference / Catalog)"] --> PrepA["Aspect-Preserving Resize (Max 1024px)<br/>Grayscale Luminance Conversion"]
+        ImgB["Image B (Query / Inspection)"] --> PrepB["Aspect-Preserving Resize (Max 1024px)<br/>Grayscale Luminance Conversion"]
     end
 
     subgraph FEATURES["2. Feature Detection & Representation"]
@@ -77,21 +79,21 @@ flowchart TD
         MAGSAC --> SPATIAL{"Spatial Dispersion Check<br/>Convex Hull Coverage ≥ 2%"}
     end
 
-    subgraph SCORING["4. Multi-Factor Scoring & Decision Bands"]
-        SPATIAL -- Passed --> ENGINE["Calibrated Scoring Formula<br/>Count Saturation (65%) + Ratio (35%)<br/>× Spatial Dampener"]
+    subgraph SCORING["4. Multi-Factor Scoring & Decision Engine"]
+        SPATIAL -- Passed --> ENGINE["Calibrated Confidence Formula<br/>Count Saturation (65%) + Ratio (35%)<br/>× Spatial Coverage Dampener"]
         SPATIAL -- Failed --> ZERO["Zero Confidence Score (0.0%)"]
         ENGINE --> TRIAD{"Decision Thresholds"}
-        ZERO --> BAND_DIFF["DIFFERENT<br/>(Rejected / Lookalike)"]
+        ZERO --> BAND_DIFF["DIFFERENT<br/>(Rejected / Lookalike Sibling)"]
         TRIAD -- "Conf ≥ 60%, Inliers ≥ 35, Ratio ≥ 0.30" --> BAND_SAME["SAME<br/>(Verified Physical Slab)"]
         TRIAD -- "Conf ≥ 25% or Inliers ≥ 10" --> BAND_SIM["SIMILAR<br/>(Partial / Inconclusive)"]
         TRIAD -- "Inliers < 10 or Low Conf" --> BAND_DIFF
     end
 
-    subgraph OUTPUTS["5. Deliverables & Interfaces"]
+    subgraph PRESENTATION["5. Delivery & User Interfaces"]
         BAND_SAME & BAND_SIM & BAND_DIFF --> CLI["Single-Pair CLI (match.py)"]
         BAND_SAME & BAND_SIM & BAND_DIFF --> BATCH["Batch Evaluation (evaluate.py)"]
         BAND_SAME & BAND_SIM & BAND_DIFF --> API["FastAPI REST Server (server.py)"]
-        API --> UI["Web App (1-to-1 & 1-to-N Search)"]
+        API --> UI["Web App (1-to-1 Verify & Catalog Search)"]
         BAND_SAME & BAND_SIM & BAND_DIFF --> VIZ["Inlier Overlay JPG Export"]
     end
 
@@ -108,20 +110,47 @@ flowchart TD
 
 ---
 
+## Verification Decision Logic & Lookalike Rejection
+
+```mermaid
+flowchart TD
+    Pair["Input Pair: Reference Slab A vs Query Slab B"] --> TypeCheck{"Physical Relationship"}
+    
+    TypeCheck -->|Exact Same Physical Piece| SameP["Identical Micro-Vein Coordinates"]
+    TypeCheck -->|Sibling Slabs (Same Quarry Block)| LookalikeP["Shared Base Color & Texture<br/>(Different Vein Fingerprints)"]
+    TypeCheck -->|Different Stone Variety| DiffP["Distinct Color & Minerals"]
+
+    SameP --> HomographyPass["Geometric Consensus: Homography Valid<br/>Inliers ≥ 35 | Inlier Ratio ≥ 30%"]
+    HomographyPass --> SameVerdict["VERDICT: SAME PHYSICAL SLAB<br/>Confidence: 60.0% – 100.0%"]
+
+    LookalikeP --> HomographyFail["Geometric Consensus: Homography Fails<br/>Inliers < 10 (Max 6 inliers observed)"]
+    HomographyFail --> LookalikeVerdict["VERDICT: DIFFERENT PHYSICAL PIECE<br/>Confidence: 0.0%<br/>(Quarry Sibling Lookalike Correctly Rejected)"]
+
+    DiffP --> DiffFail["Zero Feature Consistency<br/>Inliers < 4"]
+    DiffFail --> DiffVerdict["VERDICT: DIFFERENT PHYSICAL PIECE<br/>Confidence: 0.0%"]
+
+    classDef success fill:#d1e7dd,stroke:#0f5132,stroke-width:1.5px,color:#0f5132;
+    classDef danger fill:#f8d7da,stroke:#842029,stroke-width:1.5px,color:#842029;
+    class SameVerdict success;
+    class LookalikeVerdict,DiffVerdict danger;
+```
+
+---
+
 ## Pipeline Engineering & Mathematical Foundations
 
-### 1. Preprocessing & CLAHE Ablation
-- **Aspect-Ratio-Preserving Resize:** Longest edge constrained to $\le 1024\text{ px}$. This retains ultra-fine vein contours while capping processing latency to $< 250\text{ ms}$.
-- **Grayscale Conversion:** Isolates luminance gradients from environmental color temperature shifts (e.g., warm indoor warehouse lighting vs. natural daylight).
-- **CLAHE Ablation Decision:** Contrast-Limited Adaptive Histogram Equalization was empirically evaluated. On speckled granites, CLAHE boosted micro-noise by $300\%$, increasing nearest-neighbor matching time by $180\%$ without improving lookalike discrimination. Consequently, **CLAHE is disabled by default** (`use_clahe=False`).
+### 1. Image Ingestion & CLAHE Ablation
+- **Aspect-Ratio-Preserving Resize:** Longest edge constrained to $\le 1024\text{ px}$. Retains fine fissure resolution while capping pairwise latency to $< 250\text{ ms}$.
+- **Grayscale Luminance Conversion:** Converts standard 3-channel BGR images to single-channel 8-bit grayscale ($Y = 0.299R + 0.587G + 0.114B$) to isolate edge gradients from illumination color casts.
+- **CLAHE Ablation Decision:** Evaluated Contrast-Limited Adaptive Histogram Equalization. On speckled granites, CLAHE boosted surface grain noise by $300\%$ and increased nearest-neighbor matching time by $180\%$ without improving lookalike discrimination. **CLAHE is disabled by default** (`use_clahe=False`).
 
-### 2. Feature Extraction: Low-Threshold SIFT
-- Standard OpenCV SIFT relies on `contrastThreshold = 0.04`, which filters out subtle veins on polished white Carrara or Statuario marble ($< 80$ keypoints detected).
-- We calibrated `contrastThreshold = 0.01` with `edgeThreshold = 10.0`, yielding $3,500\text{--}4,000$ keypoints on smooth marble while capturing faint vein bifurcations.
+### 2. Feature Detection: Low-Threshold SIFT
+- Standard OpenCV SIFT relies on `contrastThreshold = 0.04`, filtering out subtle veins on polished white Carrara or Statuario marble ($< 80$ keypoints).
+- We tuned `contrastThreshold = 0.01` with `edgeThreshold = 10.0`, yielding $3,500\text{--}4,000$ keypoints on smooth marble while capturing faint vein branches.
 - `n_features = 6000` prevents combinatorial runtime explosion on heavily speckled granite slabs.
 
 ### 3. Hellinger Kernel: RootSIFT Formulation
-Standard SIFT uses Euclidean distance ($L_2$) on 128-dimensional gradient orientation histograms. $L_2$ implicitly assumes a Gaussian error model that gives disproportionate weight to large bins.
+Standard SIFT uses Euclidean distance ($L_2$) on 128-dimensional gradient orientation histograms. $L_2$ implicitly models descriptor distances with a Gaussian distribution, giving disproportionate weight to large histogram bins.
 
 The **Hellinger distance** for histograms $x, y \ge 0$ is defined as:
 $$d_H(x, y) = \sqrt{1 - \sum_{i=1}^{128} \sqrt{x_i y_i}}$$
@@ -135,18 +164,18 @@ RootSIFT algebraically maps the Hellinger distance into standard Euclidean space
    $$\|z\|_2^2 = \sum_{i=1}^{128} (\sqrt{\tilde{x}_i})^2 = \sum_{i=1}^{128} \tilde{x}_i = 1$$
    Because $\|z\|_2 = 1$ is naturally satisfied, secondary $L_2$ normalization is mathematically redundant and omitted.
 
-Empirical testing across 100 pairs demonstrated that RootSIFT expands the safety margin between the weakest genuine match and strongest lookalike by **$+13$ inliers ($+4.9\%$)**.
+Empirical testing across 100 pairs demonstrated that RootSIFT widens the separation gap between the weakest genuine match and the strongest lookalike by **$+13$ inliers ($+4.9\%$)**.
 
 ### 4. Ambiguity Filtering: Lowe's Ratio Test
 For each descriptor $d_A$, let $n_{B,1}$ and $n_{B,2}$ be the first and second nearest neighbors with distances $r_1 \le r_2$:
-$$\text{Keep match} \iff \frac{r_1}{r_2} \le \tau_{\text{ratio}} \quad (\tau_{\text{ratio}} = 0.75)$$
-This prunes repetitive crystalline patterns where ambiguous neighboring crystals produce nearly equidistant candidate matches.
+$$\text{Valid Match} \iff \frac{r_1}{r_2} \le \tau_{\text{ratio}} \quad (\tau_{\text{ratio}} = 0.75)$$
+Prunes repetitive crystalline patterns where ambiguous neighboring crystals produce nearly equidistant candidate matches.
 
-### 5. Planar Homography & USAC_MAGSAC
+### 5. Planar Homography: USAC_MAGSAC Consensus
 Because stone slabs are rigid planar surfaces, any two views of the same slab obey a projective planar homography $H \in \mathbb{R}^{3 \times 3}$:
 $$\begin{bmatrix} x' \\ y' \\ 1 \end{bmatrix} \sim H \begin{bmatrix} x \\ y \\ 1 \end{bmatrix}$$
 
-We employ `cv2.findHomography` with `cv2.USAC_MAGSAC` (reprojection error $\tau_{\text{reproj}} = 4.0\text{ px}$, confidence $= 0.999$, $\text{maxIters} = 3000$). MAGSAC++ provides robust marginalization over noise scale, outperforming standard RANSAC under oblique viewing angles.
+We estimate $H$ using `cv2.findHomography` with `cv2.USAC_MAGSAC` (reprojection error $\tau_{\text{reproj}} = 4.0\text{ px}$, confidence $= 0.999$, $\text{maxIters} = 3000$). MAGSAC++ provides robust marginalization over noise scale, outperforming standard RANSAC under oblique viewing angles.
 
 ### 6. Spatial Coverage & Degeneracy Guard
 A high inlier count clustered within a tight 20-pixel area can yield a mathematically valid homography that is physically degenerate. We compute the normalized convex hull area of inlier keypoints on both images:
@@ -174,9 +203,9 @@ $$S = S_{\text{raw}} \times \text{CoveragePenalty}$$
 
 ## Benchmark Performance & Validation
 
-Evaluated across the benchmark suite (5 Reference Slabs $\times$ 20 Query Slabs = 100 Pairwise Comparisons):
+Evaluated across all 100 pairwise comparisons in `pairs.csv`:
 
-### Summary Accuracy
+### Summary Metrics
 
 | Metric | Target Specification | Measured Result | Margin / Status |
 |:---|:---:|:---:|:---:|
@@ -187,7 +216,7 @@ Evaluated across the benchmark suite (5 Reference Slabs $\times$ 20 Query Slabs 
 | **Strongest Lookalike Sibling ($N_{\text{inliers}}$)** | $< 15$ inliers | **6 inliers** | Safety Separation Gap = **$47\times$** |
 | **Average Latency per Pair** | $< 400\text{ ms}$ | **225.8 ms** | $43.5\%$ under latency budget |
 
-### Breakdown by Perturbation Type
+### Breakdown by Distortion Category
 
 | Category | Total Pairs | Ground Truth | Classified `SAME` | Classified `SIMILAR` | Classified `DIFFERENT` | Pass Rate |
 |:---|:---:|:---:|:---:|:---:|:---:|:---:|
@@ -204,7 +233,7 @@ Evaluated across the benchmark suite (5 Reference Slabs $\times$ 20 Query Slabs 
 
 ```
 nmg/
-├── src/                               # Core pipeline modules
+├── src/                               # Core computer vision pipeline modules
 │   ├── config.py                      # Immutable pipeline configurations & thresholds
 │   ├── preprocessor.py                # Aspect-ratio resizing, grayscale conversion, CLAHE
 │   ├── extractor.py                   # SIFT, RootSIFT transformation & FeatureCache
@@ -212,16 +241,16 @@ nmg/
 │   ├── scoring.py                     # Confidence score computation & 3-band classification
 │   ├── visualizer.py                  # Inlier match rendering & base64 export
 │   └── image_matcher.py               # Unified ImageMatcher class & match_pair() API
-├── docs/                              # Project design & engineering specifications
+├── docs/                              # Project specifications & architecture design
 │   ├── BRD.md                         # Business Requirements Document & Success Metrics
 │   ├── PRD.md                         # Product Requirements Document & Functional Specs
 │   ├── ARCHITECTURE.md                # System Architecture, Math & Algorithmic Contracts
 │   └── AGILE_ROADMAP.md               # Sprints 1-4 execution roadmap & user stories
-├── tests/                             # Automated regression & integration test suite
+├── tests/                             # Automated pytest test suites
 │   ├── test_sprint1.py                # Preprocessing, RootSIFT & caching unit tests
 │   ├── test_sprint2.py                # Geometric verification & homography tests
 │   ├── test_sprint3.py                # Scoring engine & end-to-end matching tests
-│   ├── test_sprint4.py                # Benchmark integrity & live zero-hardcode tests
+│   ├── test_sprint4.py                # Benchmark integrity & self-healing tests
 │   └── test_server.py                 # FastAPI endpoints & REST integration tests
 ├── frontend/                          # Clean, responsive web dashboard
 │   ├── index.html                     # Tabbed UI (1-to-1 Verify, 1-to-N Search, Benchmark)
@@ -234,17 +263,18 @@ nmg/
 ├── match.py                           # Single-pair CLI verification tool
 ├── evaluate.py                        # Batch evaluation CLI tool (writes results.csv)
 ├── tune.py                            # Parameter ablation & tuning script
-├── server.py                          # FastAPI production server with CORS
+├── server.py                          # FastAPI production server with UI mount
+├── pytest.ini                         # Standardized test runner configuration
 ├── REPORT.md                          # Detailed engineering report & failure analysis
 ├── requirements.txt                   # Pinned production dependencies
-└── README.md                          # Main documentation
+└── README.md                          # Main project documentation
 ```
 
 ---
 
 ## Quickstart Guide
 
-### 1. Installation
+### 1. Installation & Environment Setup
 
 Create and activate a virtual environment, then install dependencies:
 
@@ -257,13 +287,30 @@ python -m venv .venv
 python3 -m venv .venv
 source .venv/bin/activate
 
-# Install requirements
+# Install dependencies
 pip install -r requirements.txt
 ```
 
-### 2. Single-Pair Verification CLI (`match.py`)
+### 2. Interactive Web Dashboard & REST Server
 
-Compare any two stone images and optionally render an inlier visualization:
+Start the integrated web application (Backend REST API + Frontend UI):
+
+```bash
+python -m uvicorn server:app --host 127.0.0.1 --port 8000
+```
+
+Once running, navigate to:
+* **Web Dashboard:** [http://127.0.0.1:8000/ui/](http://127.0.0.1:8000/ui/) or [http://127.0.0.1:8000/](http://127.0.0.1:8000/)
+* **Interactive API Docs (Swagger):** [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
+
+**Web App Features:**
+- **Tab 1: Verify Slab:** Upload two images or choose from organized presets (Genuine Same Pieces, Lookalikes, Identical Self-Matches). Supports mobile camera captures.
+- **Tab 2: Catalog Search (1-to-N):** Upload an unlabelled photo to scan all registered references and rank matches by confidence.
+- **Tab 3: Benchmark Audit:** Inspect live aggregate accuracy metrics and browse evaluated test pairs with filters.
+
+### 3. Single-Pair Verification CLI (`match.py`)
+
+Compare any two stone images from the terminal:
 
 ```bash
 python match.py \
@@ -286,9 +333,9 @@ Processing time: 248.5 ms
 Saved inlier visualization: output/img_036__B01A_carrara_reference__img_021__B01A_rotation_scale_same.jpg
 ```
 
-### 3. Batch Benchmark CLI (`evaluate.py`)
+### 4. Batch Benchmark Evaluation CLI (`evaluate.py`)
 
-Evaluate the full 100-pair benchmark dataset (or any custom CSV pair list):
+Run the full 100-pair benchmark evaluation:
 
 ```bash
 python evaluate.py \
@@ -297,12 +344,9 @@ python evaluate.py \
   --out results.csv
 ```
 
-Outputs metrics to console and writes full per-pair diagnostics into `results.csv`.
+Outputs accuracy metrics to the terminal and records per-pair diagnostics into `results.csv`.
 
-> [!NOTE]
-> If evaluated on an unlabelled hidden test set where the `label` column is `unknown`, `evaluate.py` gracefully writes `results.csv` without failing.
-
-### 4. Parameter Ablation Study (`tune.py`)
+### 5. Parameter Ablation Study (`tune.py`)
 
 Run the SIFT vs. RootSIFT empirical comparison across all benchmark pairs:
 
@@ -310,38 +354,26 @@ Run the SIFT vs. RootSIFT empirical comparison across all benchmark pairs:
 python tune.py --pairs Intern_Assignment_Dataset/pairs.csv --data Intern_Assignment_Dataset
 ```
 
-### 5. Interactive Web Dashboard & REST Server
-
-Start the FastAPI application:
-
-```bash
-uvicorn server:app --host 127.0.0.1 --port 8000 --reload
-```
-
-Then open `frontend/index.html` in your web browser (or serve via any static HTTP server):
-- **Tab 1: Verify Slab:** Upload two images, or upload just one to automatically match it against all reference slabs in inventory. Supports phone camera capture.
-- **Tab 2: Catalog Search (1-to-N):** Upload an unknown slab photo and rank all registered references by confidence score.
-- **Tab 3: Benchmark Audit:** Inspect live benchmark accuracy statistics and browse evaluated pairs with filtering.
-
 ---
 
 ## REST API Reference
 
-The server exposes standard JSON endpoints with Swagger UI at `http://127.0.0.1:8000/docs`:
+The FastAPI service exposes standard REST endpoints:
 
 | Method | Endpoint | Description |
 |:---|:---|:---|
-| `GET` | `/api/health` | Service health status check. |
-| `GET` | `/api/presets` | List registered reference slabs and query samples. |
-| `POST` | `/api/match` | Compare Image A and B (file upload or preset path). Supports auto-matching against inventory if only one image is supplied. |
+| `GET` | `/` | Redirects to `/ui/` web dashboard. |
+| `GET` | `/api/health` | Service health status check (`{"status": "ok"}`). |
+| `GET` | `/api/presets` | List registered reference inventory and categorized queries. |
+| `POST` | `/api/match` | Compare Image A and Image B (file uploads or presets). Auto-matches against inventory if only one image is supplied. Returns confidence, band, inliers, and lookalike diagnostics. |
 | `POST` | `/api/gallery-search` | 1-to-N catalog search: ranks all inventory references against a query image. |
-| `GET` | `/api/benchmark-results` | Reads `results.csv` and returns aggregate accuracy statistics. |
+| `GET` | `/api/benchmark-results` | Returns aggregate benchmark accuracy statistics and evaluation rows. |
 
 ---
 
 ## Automated Test Suite
 
-Run the full pytest test suite covering all sprints and server endpoints:
+Run the full regression and integration test suite:
 
 ```bash
 python -m pytest tests/ -v
