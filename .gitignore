@@ -1,8 +1,4 @@
-# ==============================================================================
-# Git Ignore - NMG Image Matching System
-# ==============================================================================
-
-# --- Python & Bytecode ---
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
@@ -23,13 +19,13 @@ wheels/
 .installed.cfg
 *.egg
 
-# --- Virtual Environments ---
+# Virtual environments
 .venv/
 venv/
 env/
 ENV/
 
-# --- IDEs & Editors ---
+# Editors
 .vscode/
 .idea/
 *.swp
@@ -38,27 +34,27 @@ ENV/
 *.sublime-project
 *.sublime-workspace
 
-# --- Operating System Artifacts ---
+# OS files
 .DS_Store
 Thumbs.db
 ehthumbs.db
 [Dd]esktop.ini
 
-# --- Testing, Profiling & Linting ---
+# Testing and coverage
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
 .coverage
 htmlcov/
 
-# --- Secrets & Environment Variables ---
+# Environment variables
 .env
 .env.*
 !.env.example
 *.pem
 *.key
 
-# --- Pipeline Runtime & Output Artifacts ---
+# Runtime artifacts and logs
 output/*
 !output/.gitkeep
 results/
@@ -67,7 +63,7 @@ cache/
 *.log
 *.tmp
 
-# --- Web Frontend & Build Tools (Phase 2) ---
+# Frontend (Phase 2)
 node_modules/
 .next/
 out/
