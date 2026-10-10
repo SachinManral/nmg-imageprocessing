@@ -20,7 +20,7 @@ class FeatureConfig:
     """Settings for keypoint detection and descriptor extraction."""
     method: str = "rootsift"  # 'sift' or 'rootsift'
     n_features: int = 0       # 0 means retain all detected keypoints
-    contrast_threshold: float = 0.04
+    contrast_threshold: float = 0.01
     edge_threshold: float = 10.0
     sigma: float = 1.6
 
