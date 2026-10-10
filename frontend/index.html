@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Stone Slab Verification & Geometric Matcher</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Top Navigation Bar -->
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <span class="brand-badge">CV</span>
+        <h1 class="brand-title">Slab Verification System</h1>
+      </div>
+      <div class="topbar-actions">
+        <div id="apiStatus" class="api-status checking">
+          <span class="status-dot"></span>
+          <span class="status-label">Checking API...</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="container">
+    <!-- Tab Controls -->
+    <nav class="tabs">
+      <button class="tab-btn active" data-tab="verify">Pair Verification</button>
+      <button class="tab-btn" data-tab="catalog">Catalog Search (1-to-N)</button>
+      <button class="tab-btn" data-tab="benchmark">Benchmark Audit</button>
+    </nav>
+
+    <!-- TAB 1: PAIR VERIFICATION -->
+    <section id="tab-verify" class="tab-content active">
+      <div class="section-header">
+        <h2>Pairwise Geometric Verification</h2>
+        <p>Verify whether two photographs depict the exact same physical stone piece or a distinct slab.</p>
+      </div>
+
+      <div class="compare-grid">
+        <!-- Image A Card -->
+        <div class="upload-card">
+          <div class="card-header">
+            <span class="card-tag">Reference Slab</span>
+            <h3>Image A</h3>
+          </div>
+          <div class="dropzone" id="dropzoneA">
+            <input type="file" id="fileInputA" accept="image/*" class="file-input">
+            <div class="dropzone-content" id="dropContentA">
+              <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                <circle cx="8.5" cy="8.5" r="1.5"/>
+                <polyline points="21 15 16 10 5 21"/>
+              </svg>
+              <p class="dropzone-text">Drag photo here, or <span>browse</span></p>
+              <span class="dropzone-hint">Supports phone photos, JPEG, PNG</span>
+            </div>
+            <img id="previewA" class="image-preview" alt="Preview Image A">
+          </div>
+          <div class="preset-selector">
+            <label for="selectPresetA">Or load sample:</label>
+            <select id="selectPresetA" class="form-select">
+              <option value="">-- Choose Sample Reference --</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Image B Card -->
+        <div class="upload-card">
+          <div class="card-header">
+            <span class="card-tag">Query / Inspection</span>
+            <h3>Image B</h3>
+          </div>
+          <div class="dropzone" id="dropzoneB">
+            <input type="file" id="fileInputB" accept="image/*" class="file-input">
+            <div class="dropzone-content" id="dropContentB">
+              <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                <circle cx="8.5" cy="8.5" r="1.5"/>
+                <polyline points="21 15 16 10 5 21"/>
+              </svg>
+              <p class="dropzone-text">Drag photo here, or <span>browse</span></p>
+              <span class="dropzone-hint">Supports phone photos, JPEG, PNG</span>
+            </div>
+            <img id="previewB" class="image-preview" alt="Preview Image B">
+          </div>
+          <div class="preset-selector">
+            <label for="selectPresetB">Or load sample:</label>
+            <select id="selectPresetB" class="form-select">
+              <option value="">-- Choose Sample Query --</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Action Button -->
+      <div class="action-bar">
+        <button id="btnVerify" class="btn btn-primary">
+          <span id="btnVerifyText">Run Geometric Verification</span>
+          <span id="btnVerifySpinner" class="spinner hidden"></span>
+        </button>
+        <button id="btnClear" class="btn btn-secondary">Clear</button>
+      </div>
+
+      <!-- Verification Results Panel -->
+      <div id="resultsPanel" class="results-panel hidden">
+        <div class="verdict-banner" id="verdictBanner">
+          <div class="verdict-meta">
+            <span id="verdictBadge" class="verdict-badge">SAME</span>
+            <div class="verdict-text">
+              <h3 id="verdictTitle">Verified Physical Match</h3>
+              <p id="verdictDescription">Robust planar homography confirmed across surface fissures.</p>
+            </div>
+          </div>
+          <div class="verdict-score">
+            <span class="score-number" id="metricConfidence">99.6%</span>
+            <span class="score-label">Confidence Score</span>
+          </div>
+        </div>
+
+        <!-- Metrics Grid -->
+        <div class="metrics-grid">
+          <div class="metric-card">
+            <span class="metric-title">RANSAC Inliers</span>
+            <span class="metric-value" id="metricInliers">1,227</span>
+            <span class="metric-sub" id="metricInlierRatio">Ratio: 98.9%</span>
+          </div>
+          <div class="metric-card">
+            <span class="metric-title">Good Matches</span>
+            <span class="metric-value" id="metricGoodMatches">1,240</span>
+            <span class="metric-sub" id="metricTotalMatches">Total: 3,545</span>
+          </div>
+          <div class="metric-card">
+            <span class="metric-title">Extracted Keypoints</span>
+            <span class="metric-value" id="metricKeypoints">3,545 / 3,849</span>
+            <span class="metric-sub">Image A / Image B</span>
+          </div>
+          <div class="metric-card">
+            <span class="metric-title">Processing Time</span>
+            <span class="metric-value" id="metricLatency">234 ms</span>
+            <span class="metric-sub">Feature matching + RANSAC</span>
+          </div>
+        </div>
+
+        <!-- Visualization Card -->
+        <div class="visualization-card">
+          <div class="viz-header">
+            <h4>Inlier Match Overlay</h4>
+            <span class="viz-hint">Green lines represent verified planar correspondences</span>
+          </div>
+          <div class="viz-wrapper">
+            <img id="vizImage" class="viz-img" alt="Inlier match visualization">
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 2: CATALOG SEARCH -->
+    <section id="tab-catalog" class="tab-content">
+      <div class="section-header">
+        <h2>1-to-N Catalog Search</h2>
+        <p>Identify an unknown stone piece by matching against all registered inventory references.</p>
+      </div>
+
+      <div class="catalog-layout">
+        <div class="upload-card catalog-upload">
+          <div class="card-header">
+            <span class="card-tag">Query Photo</span>
+            <h3>Upload Query Image</h3>
+          </div>
+          <div class="dropzone" id="dropzoneQuery">
+            <input type="file" id="fileInputQuery" accept="image/*" class="file-input">
+            <div class="dropzone-content" id="dropContentQuery">
+              <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                <circle cx="8.5" cy="8.5" r="1.5"/>
+                <polyline points="21 15 16 10 5 21"/>
+              </svg>
+              <p class="dropzone-text">Upload query photo or phone capture</p>
+            </div>
+            <img id="previewQuery" class="image-preview" alt="Preview Query">
+          </div>
+          <div class="preset-selector">
+            <label for="selectPresetQuery">Or select sample query:</label>
+            <select id="selectPresetQuery" class="form-select">
+              <option value="">-- Choose Sample Query --</option>
+            </select>
+          </div>
+          <button id="btnSearchCatalog" class="btn btn-primary btn-block">
+            <span id="btnSearchText">Search All References</span>
+            <span id="btnSearchSpinner" class="spinner hidden"></span>
+          </button>
+        </div>
+
+        <div class="catalog-results" id="catalogResults">
+          <div class="empty-state" id="catalogEmptyState">
+            <p>Upload a query image and click "Search All References" to view ranked matches.</p>
+          </div>
+
+          <div id="catalogMatchFound" class="catalog-match-card hidden">
+            <div class="match-badge">BEST MATCH</div>
+            <h3 id="bestMatchName">Carrara Marble (B01A)</h3>
+            <p id="bestMatchMeta">Confidence: 99.6% | 1,227 Inliers</p>
+          </div>
+
+          <table id="catalogTable" class="data-table hidden">
+            <thead>
+              <tr>
+                <th>Reference Piece</th>
+                <th>Confidence</th>
+                <th>Inliers</th>
+                <th>Inlier Ratio</th>
+                <th>Verdict</th>
+              </tr>
+            </thead>
+            <tbody id="catalogTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 3: BENCHMARK AUDIT -->
+    <section id="tab-benchmark" class="tab-content">
+      <div class="section-header">
+        <h2>Benchmark Audit & Verification Log</h2>
+        <p>Complete evaluation records across 100 pairwise comparisons on the test set.</p>
+      </div>
+
+      <div class="benchmark-stats" id="benchmarkStats">
+        <div class="stat-pill">
+          <span class="stat-num" id="statSameAcc">100.0%</span>
+          <span class="stat-lbl">Same Pairs Accuracy</span>
+        </div>
+        <div class="stat-pill">
+          <span class="stat-num" id="statDiffAcc">100.0%</span>
+          <span class="stat-lbl">Different Pairs Rejection</span>
+        </div>
+        <div class="stat-pill highlight-green">
+          <span class="stat-num" id="statLookalikeFA">0</span>
+          <span class="stat-lbl">Lookalike False Acceptances</span>
+        </div>
+        <div class="stat-pill">
+          <span class="stat-num" id="statTotalPairs">100</span>
+          <span class="stat-lbl">Evaluated Pairs</span>
+        </div>
+      </div>
+
+      <!-- Filters -->
+      <div class="table-filters">
+        <div class="filter-group">
+          <label>Filter by Pair Type:</label>
+          <select id="filterPairType" class="form-select filter-select">
+            <option value="all">All Types</option>
+            <option value="same">Genuine Same Pieces</option>
+            <option value="lookalike">Sibling Lookalikes (Same Block)</option>
+            <option value="different">Different Stone Blocks</option>
+            <option value="rotation_scale">Rotation & Scale</option>
+            <option value="viewpoint">Viewpoint Tilt</option>
+            <option value="lighting">Lighting & Glare</option>
+            <option value="occlusion">Occlusion</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label>Filter by Verdict:</label>
+          <select id="filterBand" class="form-select filter-select">
+            <option value="all">All Verdicts</option>
+            <option value="SAME">SAME</option>
+            <option value="SIMILAR">SIMILAR</option>
+            <option value="DIFFERENT">DIFFERENT</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="table-container">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Image A</th>
+              <th>Image B</th>
+              <th>Pair Type</th>
+              <th>Keypoints</th>
+              <th>Inliers</th>
+              <th>Inlier Ratio</th>
+              <th>Confidence</th>
+              <th>Decision</th>
+              <th>Time</th>
+            </tr>
+          </thead>
+          <tbody id="benchmarkTableBody">
+            <tr>
+              <td colspan="9" class="text-center">Loading benchmark data...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
