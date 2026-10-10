@@ -136,7 +136,7 @@ class FeatureExtractor:
                 image_path=processed_image.path,
                 method=self.config.method,
                 max_dim=max(processed_image.resized_shape),
-                use_clahe=False,  # Captured at caller level
+                use_clahe=processed_image.use_clahe,
             )
             if cached is not None:
                 return cached
@@ -169,7 +169,7 @@ class FeatureExtractor:
                 image_path=processed_image.path,
                 method=self.config.method,
                 max_dim=max(processed_image.resized_shape),
-                use_clahe=False,
+                use_clahe=processed_image.use_clahe,
                 features=features,
             )
 

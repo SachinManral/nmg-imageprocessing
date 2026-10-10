@@ -20,6 +20,7 @@ class ProcessedImage:
     original_shape: Tuple[int, int]  # (height, width)
     resized_shape: Tuple[int, int]   # (height, width)
     scale_factor: float
+    use_clahe: bool = False
     is_valid: bool = True
     error_message: Optional[str] = None
 
@@ -113,6 +114,7 @@ class ImagePreprocessor:
             original_shape=(orig_h, orig_w),
             resized_shape=(gray.shape[0], gray.shape[1]),
             scale_factor=scale_factor,
+            use_clahe=self.config.use_clahe,
             is_valid=True,
             error_message=None,
         )
