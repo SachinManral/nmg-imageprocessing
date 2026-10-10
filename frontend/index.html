@@ -27,7 +27,7 @@
   <main class="container">
     <!-- Tab Controls -->
     <nav class="tabs">
-      <button class="tab-btn active" data-tab="verify">Pair Verification</button>
+      <button class="tab-btn active" data-tab="verify">Verify Slab</button>
       <button class="tab-btn" data-tab="catalog">Catalog Search (1-to-N)</button>
       <button class="tab-btn" data-tab="benchmark">Benchmark Audit</button>
     </nav>
@@ -35,16 +35,19 @@
     <!-- TAB 1: PAIR VERIFICATION -->
     <section id="tab-verify" class="tab-content active">
       <div class="section-header">
-        <h2>Pairwise Geometric Verification</h2>
-        <p>Verify whether two photographs depict the exact same physical stone piece or a distinct slab.</p>
+        <h2>Geometric Slab Verification</h2>
+        <p>Upload a photo or capture one with your phone camera. If you don't upload a reference photo, the system will automatically search and verify it against all pre-registered inventory slabs.</p>
       </div>
 
       <div class="compare-grid">
-        <!-- Image A Card -->
+        <!-- Image A Card (Optional Reference) -->
         <div class="upload-card">
           <div class="card-header">
-            <span class="card-tag">Reference Slab</span>
-            <h3>Image A</h3>
+            <div>
+              <h3>Reference Slab</h3>
+              <span class="card-subtitle">Optional &mdash; auto-checks inventory if empty</span>
+            </div>
+            <span class="card-tag tag-optional">Optional</span>
           </div>
           <div class="dropzone" id="dropzoneA">
             <input type="file" id="fileInputA" accept="image/*" class="file-input">
@@ -54,24 +57,27 @@
                 <circle cx="8.5" cy="8.5" r="1.5"/>
                 <polyline points="21 15 16 10 5 21"/>
               </svg>
-              <p class="dropzone-text">Drag photo here, or <span>browse</span></p>
-              <span class="dropzone-hint">Supports phone photos, JPEG, PNG</span>
+              <p class="dropzone-text">Drag reference here, or <span>browse</span></p>
+              <span class="dropzone-hint">Leave blank to auto-match catalog</span>
             </div>
             <img id="previewA" class="image-preview" alt="Preview Image A">
           </div>
           <div class="preset-selector">
-            <label for="selectPresetA">Or load sample:</label>
+            <label for="selectPresetA">Or choose from inventory:</label>
             <select id="selectPresetA" class="form-select">
-              <option value="">-- Choose Sample Reference --</option>
+              <option value="">-- [Auto-Match Against All References] --</option>
             </select>
           </div>
         </div>
 
-        <!-- Image B Card -->
+        <!-- Image B Card (Query / Phone Capture) -->
         <div class="upload-card">
           <div class="card-header">
-            <span class="card-tag">Query / Inspection</span>
-            <h3>Image B</h3>
+            <div>
+              <h3>Inspection Photo</h3>
+              <span class="card-subtitle">From phone camera or gallery</span>
+            </div>
+            <span class="card-tag tag-primary">Target</span>
           </div>
           <div class="dropzone" id="dropzoneB">
             <input type="file" id="fileInputB" accept="image/*" class="file-input">
@@ -82,12 +88,23 @@
                 <polyline points="21 15 16 10 5 21"/>
               </svg>
               <p class="dropzone-text">Drag photo here, or <span>browse</span></p>
-              <span class="dropzone-hint">Supports phone photos, JPEG, PNG</span>
+              <span class="dropzone-hint">Supports phone photos, camera uploads</span>
             </div>
             <img id="previewB" class="image-preview" alt="Preview Image B">
           </div>
+          <div class="camera-actions">
+            <!-- Mobile Camera Capture Input -->
+            <input type="file" id="cameraInputB" accept="image/*" capture="environment" class="hidden">
+            <button type="button" id="btnCaptureCamera" class="btn btn-secondary btn-sm">
+              <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                <circle cx="12" cy="13" r="4"/>
+              </svg>
+              Take Photo with Camera
+            </button>
+          </div>
           <div class="preset-selector">
-            <label for="selectPresetB">Or load sample:</label>
+            <label for="selectPresetB">Or test a sample query:</label>
             <select id="selectPresetB" class="form-select">
               <option value="">-- Choose Sample Query --</option>
             </select>
@@ -98,7 +115,7 @@
       <!-- Action Button -->
       <div class="action-bar">
         <button id="btnVerify" class="btn btn-primary">
-          <span id="btnVerifyText">Run Geometric Verification</span>
+          <span id="btnVerifyText">Verify Slab</span>
           <span id="btnVerifySpinner" class="spinner hidden"></span>
         </button>
         <button id="btnClear" class="btn btn-secondary">Clear</button>
@@ -112,6 +129,9 @@
             <div class="verdict-text">
               <h3 id="verdictTitle">Verified Physical Match</h3>
               <p id="verdictDescription">Robust planar homography confirmed across surface fissures.</p>
+              <div id="autoMatchBadge" class="auto-match-tag hidden">
+                Matched Inventory Reference: <strong id="matchedRefName">Carrara Marble B01A</strong>
+              </div>
             </div>
           </div>
           <div class="verdict-score">
@@ -135,7 +155,7 @@
           <div class="metric-card">
             <span class="metric-title">Extracted Keypoints</span>
             <span class="metric-value" id="metricKeypoints">3,545 / 3,849</span>
-            <span class="metric-sub">Image A / Image B</span>
+            <span class="metric-sub">Reference / Inspection</span>
           </div>
           <div class="metric-card">
             <span class="metric-title">Processing Time</span>
@@ -167,8 +187,8 @@
       <div class="catalog-layout">
         <div class="upload-card catalog-upload">
           <div class="card-header">
-            <span class="card-tag">Query Photo</span>
-            <h3>Upload Query Image</h3>
+            <h3>Query Photo</h3>
+            <span class="card-tag tag-primary">Target</span>
           </div>
           <div class="dropzone" id="dropzoneQuery">
             <input type="file" id="fileInputQuery" accept="image/*" class="file-input">
@@ -181,6 +201,16 @@
               <p class="dropzone-text">Upload query photo or phone capture</p>
             </div>
             <img id="previewQuery" class="image-preview" alt="Preview Query">
+          </div>
+          <div class="camera-actions">
+            <input type="file" id="cameraInputQuery" accept="image/*" capture="environment" class="hidden">
+            <button type="button" id="btnCaptureCameraQuery" class="btn btn-secondary btn-sm">
+              <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                <circle cx="12" cy="13" r="4"/>
+              </svg>
+              Take Photo with Camera
+            </button>
           </div>
           <div class="preset-selector">
             <label for="selectPresetQuery">Or select sample query:</label>

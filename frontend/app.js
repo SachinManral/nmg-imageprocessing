@@ -13,6 +13,7 @@ let state = {
 document.addEventListener("DOMContentLoaded", () => {
   initTabs();
   initDropzones();
+  initCameraButtons();
   checkApiHealth();
   loadPresets();
   loadBenchmarkData();
@@ -86,7 +87,7 @@ async function loadPresets() {
   }
 }
 
-// Setup Dropzones
+// Setup Dropzones & File Uploads
 function initDropzones() {
   setupSingleDropzone("dropzoneA", "fileInputA", "previewA", "dropContentA", (file) => {
     state.fileA = file;
@@ -124,6 +125,39 @@ function initDropzones() {
     state.queryFile = null;
     clearPreview("previewQuery", "dropContentQuery");
   });
+}
+
+// Mobile & Camera Trigger Buttons
+function initCameraButtons() {
+  const btnCamB = document.getElementById("btnCaptureCamera");
+  const inputCamB = document.getElementById("cameraInputB");
+  if (btnCamB && inputCamB) {
+    btnCamB.addEventListener("click", () => inputCamB.click());
+    inputCamB.addEventListener("change", (e) => {
+      if (e.target.files && e.target.files[0]) {
+        handleFile(e.target.files[0], document.getElementById("previewB"), document.getElementById("dropContentB"), (file) => {
+          state.fileB = file;
+          state.presetB = "";
+          document.getElementById("selectPresetB").value = "";
+        });
+      }
+    });
+  }
+
+  const btnCamQ = document.getElementById("btnCaptureCameraQuery");
+  const inputCamQ = document.getElementById("cameraInputQuery");
+  if (btnCamQ && inputCamQ) {
+    btnCamQ.addEventListener("click", () => inputCamQ.click());
+    inputCamQ.addEventListener("change", (e) => {
+      if (e.target.files && e.target.files[0]) {
+        handleFile(e.target.files[0], document.getElementById("previewQuery"), document.getElementById("dropContentQuery"), (file) => {
+          state.queryFile = file;
+          state.presetQuery = "";
+          document.getElementById("selectPresetQuery").value = "";
+        });
+      }
+    });
+  }
 }
 
 function setupSingleDropzone(dropzoneId, inputId, previewId, contentId, onFile) {
@@ -206,13 +240,13 @@ function handleClear() {
   document.getElementById("resultsPanel").classList.add("hidden");
 }
 
-// Verify Pair
+// Verify Slab (Supports either 1 single photo or a pair)
 async function handleVerify() {
   const hasA = state.fileA || state.presetA;
   const hasB = state.fileB || state.presetB;
 
-  if (!hasA || !hasB) {
-    alert("Please select or upload both Image A and Image B.");
+  if (!hasA && !hasB) {
+    alert("Please upload or capture at least one photo.");
     return;
   }
 
@@ -221,15 +255,15 @@ async function handleVerify() {
   const spinner = document.getElementById("btnVerifySpinner");
 
   btn.disabled = true;
-  btnText.textContent = "Analyzing Geometry...";
+  btnText.textContent = hasA && hasB ? "Comparing Pair..." : "Scanning Reference Catalog...";
   spinner.classList.remove("hidden");
 
   const formData = new FormData();
   if (state.fileA) formData.append("file_a", state.fileA);
-  else formData.append("preset_a", state.presetA);
+  else if (state.presetA) formData.append("preset_a", state.presetA);
 
   if (state.fileB) formData.append("file_b", state.fileB);
-  else formData.append("preset_b", state.presetB);
+  else if (state.presetB) formData.append("preset_b", state.presetB);
 
   try {
     const res = await fetch(`${API_BASE}/api/match`, {
@@ -248,7 +282,7 @@ async function handleVerify() {
     alert(`Verification Error: ${err.message}`);
   } finally {
     btn.disabled = false;
-    btnText.textContent = "Run Geometric Verification";
+    btnText.textContent = "Verify Slab";
     spinner.classList.add("hidden");
   }
 }
@@ -266,15 +300,24 @@ function renderResults(data) {
 
   const title = document.getElementById("verdictTitle");
   const desc = document.getElementById("verdictDescription");
+  const autoTag = document.getElementById("autoMatchBadge");
+  const matchedName = document.getElementById("matchedRefName");
+
+  if (data.is_auto_matched && data.matched_reference_name) {
+    autoTag.classList.remove("hidden");
+    matchedName.textContent = data.matched_reference_name;
+  } else {
+    autoTag.classList.add("hidden");
+  }
 
   if (data.band === "SAME") {
-    title.textContent = "Verified Physical Match";
-    desc.textContent = "High-confidence planar consensus confirmed across unique vein geometry.";
+    title.textContent = data.is_auto_matched ? "Verified Against Inventory" : "Verified Physical Match";
+    desc.textContent = "Robust planar homography confirmed across surface fissures.";
   } else if (data.band === "SIMILAR") {
     title.textContent = "Inconclusive Evidence";
     desc.textContent = "Partial feature alignment detected, but insufficient to prove same physical piece.";
   } else {
-    title.textContent = "Different Physical Piece";
+    title.textContent = data.is_auto_matched ? "No Inventory Match" : "Different Physical Piece";
     desc.textContent = "No consistent planar homography found. Rejected as unrelated stone or lookalike.";
   }
 
@@ -294,7 +337,7 @@ function renderResults(data) {
   panel.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
-// Catalog Search
+// Catalog Search (Tab 2)
 async function handleCatalogSearch() {
   const hasQuery = state.queryFile || state.presetQuery;
   if (!hasQuery) {
@@ -363,7 +406,7 @@ function renderCatalogResults(data) {
   table.classList.remove("hidden");
 }
 
-// Benchmark Audit
+// Benchmark Audit (Tab 3)
 async function loadBenchmarkData() {
   try {
     const res = await fetch(`${API_BASE}/api/benchmark-results`);

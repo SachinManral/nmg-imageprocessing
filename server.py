@@ -76,26 +76,83 @@ async def match_endpoint(
 ):
     temp_dir = tempfile.mkdtemp()
     try:
-        # Resolve Image A
+        path_a: Optional[Path] = None
+        path_b: Optional[Path] = None
+
+        # Resolve Image A if provided
         if file_a and file_a.filename:
             path_a = Path(temp_dir) / file_a.filename
             with open(path_a, "wb") as buffer:
                 shutil.copyfileobj(file_a.file, buffer)
         elif preset_a:
             path_a = BASE_DIR / preset_a
-        else:
-            return JSONResponse({"error": "Image A is required"}, status_code=400)
 
-        # Resolve Image B
+        # Resolve Image B if provided
         if file_b and file_b.filename:
             path_b = Path(temp_dir) / file_b.filename
             with open(path_b, "wb") as buffer:
                 shutil.copyfileobj(file_b.file, buffer)
         elif preset_b:
             path_b = BASE_DIR / preset_b
-        else:
-            return JSONResponse({"error": "Image B is required"}, status_code=400)
 
+        # CASE 1: Only ONE image provided (Auto-match against pre-fed references)
+        if (path_a is None and path_b is not None) or (path_a is not None and path_b is None):
+            query_path = path_b if path_b is not None else path_a
+            ref_dir = DATASET_DIR / "reference"
+            if not ref_dir.exists():
+                return JSONResponse({"error": "Pre-fed reference inventory not found"}, status_code=500)
+
+            best_res = None
+            best_ref_label = ""
+            best_ref_path = None
+            highest_conf = -1.0
+
+            for ref_file in sorted(ref_dir.glob("*.jpg")):
+                curr_res = matcher.match(str(ref_file), str(query_path))
+                if curr_res.confidence > highest_conf:
+                    highest_conf = curr_res.confidence
+                    best_res = curr_res
+                    best_ref_path = ref_file
+                    name_parts = ref_file.stem.split("__")
+                    best_ref_label = name_parts[1].replace("_", " ").title() if len(name_parts) > 1 else ref_file.stem
+
+            if best_res is None:
+                return JSONResponse({"error": "Failed to evaluate against inventory"}, status_code=500)
+
+            vis_base64 = ""
+            if best_res.color_a is not None and best_res.color_b is not None:
+                vis_base64 = MatchVisualizer.render_inliers_to_base64(
+                    image_a_bgr=best_res.color_a,
+                    keypoints_a=best_res.keypoints_a_objs,
+                    image_b_bgr=best_res.color_b,
+                    keypoints_b=best_res.keypoints_b_objs,
+                    inlier_matches=best_res.inlier_matches,
+                    band=best_res.band,
+                    confidence=best_res.confidence,
+                )
+
+            return {
+                "status": best_res.status,
+                "band": best_res.band,
+                "confidence": best_res.confidence,
+                "inliers": best_res.inliers,
+                "good_matches": best_res.good_matches,
+                "total_matches": best_res.total_matches,
+                "inlier_ratio": best_res.inlier_ratio,
+                "keypoints_a": best_res.keypoints_a,
+                "keypoints_b": best_res.keypoints_b,
+                "time_ms": best_res.time_ms,
+                "error_message": best_res.error_message,
+                "visualization": vis_base64,
+                "is_auto_matched": True,
+                "matched_reference_name": best_ref_label,
+            }
+
+        # CASE 2: Neither image provided
+        if path_a is None and path_b is None:
+            return JSONResponse({"error": "Please upload at least one image or choose a sample."}, status_code=400)
+
+        # CASE 3: Both images provided (Direct pairwise matching)
         result = matcher.match(str(path_a), str(path_b))
 
         vis_base64 = ""
@@ -123,6 +180,8 @@ async def match_endpoint(
             "time_ms": result.time_ms,
             "error_message": result.error_message,
             "visualization": vis_base64,
+            "is_auto_matched": False,
+            "matched_reference_name": None,
         }
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
