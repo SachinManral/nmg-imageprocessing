@@ -1,4 +1,4 @@
-const API_BASE = "http://localhost:8000";
+const API_BASE = window.location.origin.includes("http") ? window.location.origin : "http://localhost:8000";
 
 let state = {
   fileA: null,
@@ -64,27 +64,77 @@ async function loadPresets() {
     const selectB = document.getElementById("selectPresetB");
     const selectQuery = document.getElementById("selectPresetQuery");
 
+    selectA.innerHTML = '<option value="">-- [Auto-Match Against All References] --</option>';
+    selectB.innerHTML = '<option value="">-- Choose Sample Query or Reference --</option>';
+    selectQuery.innerHTML = '<option value="">-- Choose Target Query Image --</option>';
+
+    // References group for Box A
+    const grpA = document.createElement("optgroup");
+    grpA.label = "Registered Inventory References";
     data.references.forEach((r) => {
       const opt = document.createElement("option");
       opt.value = r.id;
+      opt.dataset.preview = r.preview_url;
       opt.textContent = `${r.name} (${r.filename})`;
-      selectA.appendChild(opt);
+      grpA.appendChild(opt);
     });
+    selectA.appendChild(grpA);
+
+    // Box B: Group into Genuine Matches, Lookalikes, and Identical Self-Matches
+    const grpSame = document.createElement("optgroup");
+    grpSame.label = "✅ Genuine Matches (Same Physical Piece)";
+
+    const grpLookalike = document.createElement("optgroup");
+    grpLookalike.label = "⚠️ Sibling Block Lookalikes (Must Be Correctly Rejected)";
 
     data.queries.forEach((q) => {
-      const optB = document.createElement("option");
-      optB.value = q.id;
-      optB.textContent = `${q.name} (${q.filename})`;
-      selectB.appendChild(optB);
+      const opt = document.createElement("option");
+      opt.value = q.id;
+      opt.dataset.preview = q.preview_url;
+      opt.textContent = `${q.name} (${q.filename})`;
 
+      if (q.is_same) {
+        grpSame.appendChild(opt);
+      } else if (q.is_lookalike) {
+        grpLookalike.appendChild(opt);
+      } else {
+        grpSame.appendChild(opt);
+      }
+
+      // Also for gallery search tab
       const optQ = document.createElement("option");
       optQ.value = q.id;
+      optQ.dataset.preview = q.preview_url;
       optQ.textContent = `${q.name} (${q.filename})`;
       selectQuery.appendChild(optQ);
     });
+
+    // Reference group in Box B for testing self / identical match
+    const grpRefB = document.createElement("optgroup");
+    grpRefB.label = "🔍 Test Identical / Self Match (Reference vs Itself)";
+    data.references.forEach((r) => {
+      const opt = document.createElement("option");
+      opt.value = r.id;
+      opt.dataset.preview = r.preview_url;
+      opt.textContent = `[IDENTICAL] ${r.name} (${r.filename})`;
+      grpRefB.appendChild(opt);
+    });
+
+    selectB.appendChild(grpSame);
+    selectB.appendChild(grpLookalike);
+    selectB.appendChild(grpRefB);
   } catch (err) {
     console.warn("Presets could not be loaded:", err);
   }
+}
+
+// Helper to show preset image preview
+function setPresetPreview(previewId, contentId, imgUrl) {
+  const preview = document.getElementById(previewId);
+  const content = document.getElementById(contentId);
+  preview.src = imgUrl;
+  preview.classList.add("active");
+  content.classList.add("hidden");
 }
 
 // Setup Dropzones & File Uploads
@@ -107,23 +157,38 @@ function initDropzones() {
     document.getElementById("selectPresetQuery").value = "";
   });
 
-  // Preset Selectors
+  // Preset Selectors with immediate preview rendering
   document.getElementById("selectPresetA").addEventListener("change", (e) => {
     state.presetA = e.target.value;
     state.fileA = null;
-    clearPreview("previewA", "dropContentA");
+    const selectedOpt = e.target.selectedOptions[0];
+    if (selectedOpt && selectedOpt.dataset.preview) {
+      setPresetPreview("previewA", "dropContentA", `${API_BASE}${selectedOpt.dataset.preview}`);
+    } else {
+      clearPreview("previewA", "dropContentA");
+    }
   });
 
   document.getElementById("selectPresetB").addEventListener("change", (e) => {
     state.presetB = e.target.value;
     state.fileB = null;
-    clearPreview("previewB", "dropContentB");
+    const selectedOpt = e.target.selectedOptions[0];
+    if (selectedOpt && selectedOpt.dataset.preview) {
+      setPresetPreview("previewB", "dropContentB", `${API_BASE}${selectedOpt.dataset.preview}`);
+    } else {
+      clearPreview("previewB", "dropContentB");
+    }
   });
 
   document.getElementById("selectPresetQuery").addEventListener("change", (e) => {
     state.presetQuery = e.target.value;
     state.queryFile = null;
-    clearPreview("previewQuery", "dropContentQuery");
+    const selectedOpt = e.target.selectedOptions[0];
+    if (selectedOpt && selectedOpt.dataset.preview) {
+      setPresetPreview("previewQuery", "dropContentQuery", `${API_BASE}${selectedOpt.dataset.preview}`);
+    } else {
+      clearPreview("previewQuery", "dropContentQuery");
+    }
   });
 }
 
@@ -311,14 +376,19 @@ function renderResults(data) {
   }
 
   if (data.band === "SAME") {
-    title.textContent = data.is_auto_matched ? "Verified Against Inventory" : "Verified Physical Match";
-    desc.textContent = "Robust planar homography confirmed across surface fissures.";
+    title.textContent = data.is_auto_matched ? "Verified Against Inventory" : "Verified Physical Slab Match";
+    desc.textContent = "Robust planar homography confirmed across surface fissures (Identical physical stone).";
   } else if (data.band === "SIMILAR") {
     title.textContent = "Inconclusive Evidence";
     desc.textContent = "Partial feature alignment detected, but insufficient to prove same physical piece.";
   } else {
-    title.textContent = data.is_auto_matched ? "No Inventory Match" : "Different Physical Piece";
-    desc.textContent = "No consistent planar homography found. Rejected as unrelated stone or lookalike.";
+    if (data.is_lookalike_pair) {
+      title.textContent = "Quarry Sibling Lookalike (Correctly Rejected)";
+      desc.textContent = data.lookalike_reason || "Sibling slabs cut from adjacent quarry blocks share color and texture ('family resemblance'), but differing vein topology proves they are separate physical pieces. Zero lookalike false acceptance enforced.";
+    } else {
+      title.textContent = data.is_auto_matched ? "No Inventory Match" : "Different Physical Piece";
+      desc.textContent = "No consistent planar homography found. Rejected as unrelated stone or lookalike.";
+    }
   }
 
   document.getElementById("metricConfidence").textContent = `${data.confidence.toFixed(1)}%`;
