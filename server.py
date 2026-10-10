@@ -239,7 +239,20 @@ async def gallery_search_endpoint(
 def get_benchmark_results():
     csv_file = BASE_DIR / "results.csv"
     if not csv_file.exists():
-        return JSONResponse({"rows": [], "summary": {}})
+        pairs_csv = DATASET_DIR / "pairs.csv"
+        if DATASET_DIR.exists() and pairs_csv.exists():
+            from evaluate import evaluate_batch
+            evaluate_batch(str(DATASET_DIR), str(pairs_csv), str(csv_file))
+        else:
+            return JSONResponse({
+                "rows": [],
+                "summary": {
+                    "total_pairs": 0,
+                    "same_accuracy": 0.0,
+                    "diff_accuracy": 0.0,
+                    "lookalike_false_acceptances": 0,
+                },
+            })
 
     rows = []
     with open(csv_file, mode="r", encoding="utf-8") as f:
@@ -247,16 +260,16 @@ def get_benchmark_results():
         for r in reader:
             rows.append(r)
 
-    same_total = sum(1 for r in rows if r["label"] == "same")
-    same_correct = sum(1 for r in rows if r["label"] == "same" and r["band"] == "SAME")
-    diff_total = sum(1 for r in rows if r["label"] == "different")
-    diff_correct = sum(1 for r in rows if r["label"] == "different" and r["band"] in ["DIFFERENT", "SIMILAR"])
-    lookalike_false = sum(1 for r in rows if r["pair_type"] == "lookalike" and r["band"] == "SAME")
+    same_total = sum(1 for r in rows if r.get("label") == "same")
+    same_correct = sum(1 for r in rows if r.get("label") == "same" and r.get("band") == "SAME")
+    diff_total = sum(1 for r in rows if r.get("label") == "different")
+    diff_correct = sum(1 for r in rows if r.get("label") == "different" and r.get("band") in ["DIFFERENT", "SIMILAR"])
+    lookalike_false = sum(1 for r in rows if r.get("pair_type") == "lookalike" and r.get("band") == "SAME")
 
     summary = {
         "total_pairs": len(rows),
-        "same_accuracy": round((same_correct / same_total * 100.0) if same_total else 0, 1),
-        "diff_accuracy": round((diff_correct / diff_total * 100.0) if diff_total else 0, 1),
+        "same_accuracy": round((same_correct / same_total * 100.0) if same_total else 0.0, 1),
+        "diff_accuracy": round((diff_correct / diff_total * 100.0) if diff_total else 0.0, 1),
         "lookalike_false_acceptances": lookalike_false,
     }
 
