@@ -65,8 +65,32 @@ def test_sample_output_visualizations():
     assert len(jpg_files) >= 3, f"Expected at least 3 sample visualizations, found {len(jpg_files)}"
 
 
+def test_live_realtime_pipeline_evaluation():
+    from src.image_matcher import match_pair
+
+    # Real-time evaluation of an arbitrary pair - verifies zero hardcoding
+    ref = "Intern_Assignment_Dataset/reference/img_039__B02A_statuario_reference.jpg"
+    query_same = "Intern_Assignment_Dataset/queries/img_008__B02A_lighting_same.jpg"
+    query_lookalike = "Intern_Assignment_Dataset/queries/img_046__B02B_rotation_scale_lookalike.jpg"
+
+    res_same = match_pair(ref, query_same)
+    assert res_same.status == "SUCCESS"
+    assert res_same.keypoints_a > 1000
+    assert res_same.keypoints_b > 1000
+    assert res_same.inliers > 100
+    assert res_same.band == "SAME"
+    assert res_same.confidence >= 60.0
+
+    res_lookalike = match_pair(ref, query_lookalike)
+    assert res_lookalike.status == "SUCCESS"
+    assert res_lookalike.inliers < 15
+    assert res_lookalike.band == "DIFFERENT"
+    assert res_lookalike.confidence == 0.0
+
+
 if __name__ == "__main__":
     test_results_csv_integrity()
     test_report_md_deliverable()
     test_sample_output_visualizations()
+    test_live_realtime_pipeline_evaluation()
     print("All Sprint 4 verification suites passed successfully!")
