@@ -13,6 +13,7 @@ class PreprocessConfig:
     use_clahe: bool = False
     clahe_clip_limit: float = 2.0
     clahe_grid_size: Tuple[int, int] = (8, 8)
+    enable_clahe_fallback: bool = True
 
 
 @dataclass(frozen=True)

@@ -81,11 +81,9 @@ async function loadPresets() {
     selectA.appendChild(grpA);
 
     // Box B: Group into Genuine Matches, Lookalikes, and Identical Self-Matches
-    const grpSame = document.createElement("optgroup");
-    grpSame.label = "✅ Genuine Matches (Same Physical Piece)";
+    const grpQueries = document.createElement("optgroup");
+    grpQueries.label = "Sample Inspection Photos";
 
-    const grpLookalike = document.createElement("optgroup");
-    grpLookalike.label = "⚠️ Sibling Block Lookalikes (Must Be Correctly Rejected)";
 
     data.queries.forEach((q) => {
       const opt = document.createElement("option");
@@ -93,13 +91,7 @@ async function loadPresets() {
       opt.dataset.preview = q.preview_url;
       opt.textContent = `${q.name} (${q.filename})`;
 
-      if (q.is_same) {
-        grpSame.appendChild(opt);
-      } else if (q.is_lookalike) {
-        grpLookalike.appendChild(opt);
-      } else {
-        grpSame.appendChild(opt);
-      }
+      grpQueries.appendChild(opt);
 
       // Also for gallery search tab
       const optQ = document.createElement("option");
@@ -120,8 +112,7 @@ async function loadPresets() {
       grpRefB.appendChild(opt);
     });
 
-    selectB.appendChild(grpSame);
-    selectB.appendChild(grpLookalike);
+    selectB.appendChild(grpQueries);
     selectB.appendChild(grpRefB);
   } catch (err) {
     console.warn("Presets could not be loaded:", err);
@@ -382,14 +373,8 @@ function renderResults(data) {
     title.textContent = "Inconclusive Evidence";
     desc.textContent = "Partial feature alignment detected, but insufficient to prove same physical piece.";
   } else {
-    if (data.is_lookalike_pair) {
-      title.textContent = "Quarry Sibling Lookalike (Correctly Rejected)";
-      const famPrefix = data.stone_family ? `[Stone Family: ${data.stone_family}] ` : "";
-      desc.textContent = famPrefix + (data.lookalike_reason || "Sibling slabs cut from adjacent quarry blocks share color and texture ('family resemblance'), but differing vein topology proves they are separate physical pieces. Zero lookalike false acceptance enforced.");
-    } else {
-      title.textContent = data.is_auto_matched ? "No Inventory Match" : "Different Physical Piece";
-      desc.textContent = "No consistent planar homography found. Rejected as unrelated stone or lookalike.";
-    }
+    title.textContent = data.is_auto_matched ? "No Inventory Match" : "Different Physical Piece";
+    desc.textContent = "No consistent planar geometry was found between the visible surface features.";
   }
 
   document.getElementById("metricConfidence").textContent = `${data.confidence.toFixed(1)}%`;

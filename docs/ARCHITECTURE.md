@@ -43,6 +43,8 @@ flowchart TB
 7. Check the inlier count and convex-hull spatial coverage on both images.
 8. Score valid geometry and classify the result.
 
+When the standard pass is `DIFFERENT`, the matcher optionally performs a second pass with CLAHE local-contrast normalisation. It selects that pass only if the resulting band or evidence is stronger. Both passes use identical matching, homography, and coverage rules.
+
 ### Evidence gate
 
 ```mermaid

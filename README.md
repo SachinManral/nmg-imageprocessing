@@ -71,6 +71,8 @@ python -m pytest -q
 4. `cv2.findHomography` estimates a planar transform using USAC_MAGSAC where available, otherwise RANSAC.
 5. The system checks inlier count, ratio, and spatial coverage before scoring the pair.
 
+If the standard pass returns `DIFFERENT`, the system can retry with CLAHE local-contrast normalisation. It keeps that result only if it produces stronger geometric evidence; the same homography and coverage requirements still apply. This helps with uneven lighting or glare without accepting a match merely because the images look alike.
+
 `SAME` requires confidence of at least 60, 35 inliers, and an inlier ratio of at least 0.30. Geometry with fewer than eight inliers or coverage below 2% is invalid and receives zero confidence.
 
 ```mermaid

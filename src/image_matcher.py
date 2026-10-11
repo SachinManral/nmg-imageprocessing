@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 import time
 from typing import List, Optional
@@ -51,29 +51,68 @@ class ImageMatcher:
     def match(self, image_a_path: str, image_b_path: str) -> MatchResult:
         start_time = time.perf_counter()
 
+        # Run the normal pipeline first. It preserves the original image
+        # contrast and is the lowest-cost option for most comparisons.
+        result = self._match_once(
+            image_a_path,
+            image_b_path,
+            self.preprocessor,
+            self.extractor,
+        )
+
+        # Strong glare or uneven exposure can make the standard ratio test
+        # discard real correspondences. For inconclusive pairs only, retry
+        # with local contrast normalisation and retain it only when it offers
+        # stronger geometric evidence. The same homography and coverage gates
+        # still apply, so this is not a filename- or sample-specific rule.
+        if (
+            result.status == "SUCCESS"
+            and result.band == "DIFFERENT"
+            and self.config.preprocess.enable_clahe_fallback
+            and not self.config.preprocess.use_clahe
+        ):
+            fallback_config = replace(self.config.preprocess, use_clahe=True)
+            fallback_preprocessor = ImagePreprocessor(fallback_config)
+            fallback_extractor = FeatureExtractor(self.config.feature, cache=self.cache)
+            fallback_result = self._match_once(
+                image_a_path,
+                image_b_path,
+                fallback_preprocessor,
+                fallback_extractor,
+            )
+            if self._is_stronger_result(fallback_result, result):
+                result = fallback_result
+
+        result.time_ms = round((time.perf_counter() - start_time) * 1000.0, 1)
+        return result
+
+    def _match_once(
+        self,
+        image_a_path: str,
+        image_b_path: str,
+        preprocessor: ImagePreprocessor,
+        extractor: FeatureExtractor,
+    ) -> MatchResult:
+
         # Preprocessing
-        img_a = self.preprocessor.load_and_preprocess(image_a_path)
-        img_b = self.preprocessor.load_and_preprocess(image_b_path)
+        img_a = preprocessor.load_and_preprocess(image_a_path)
+        img_b = preprocessor.load_and_preprocess(image_b_path)
 
         if not img_a.is_valid:
-            elapsed = (time.perf_counter() - start_time) * 1000.0
-            return self._error_result(image_a_path, image_b_path, img_a.error_message, elapsed)
+            return self._error_result(image_a_path, image_b_path, img_a.error_message, 0.0)
 
         if not img_b.is_valid:
-            elapsed = (time.perf_counter() - start_time) * 1000.0
-            return self._error_result(image_a_path, image_b_path, img_b.error_message, elapsed)
+            return self._error_result(image_a_path, image_b_path, img_b.error_message, 0.0)
 
         # Feature extraction
-        feat_a = self.extractor.extract(img_a)
-        feat_b = self.extractor.extract(img_b)
+        feat_a = extractor.extract(img_a)
+        feat_b = extractor.extract(img_b)
 
         # Matching and geometric verification
         match_out = self.matcher.match_features(feat_a, feat_b)
 
         # Confidence scoring and band assignment
         score_out = self.scorer.compute_score(match_out)
-
-        elapsed_ms = round((time.perf_counter() - start_time) * 1000.0, 1)
 
         return MatchResult(
             image_a=image_a_path,
@@ -86,7 +125,7 @@ class ImageMatcher:
             inlier_ratio=match_out.inlier_ratio,
             confidence=score_out.confidence,
             band=score_out.band,
-            time_ms=elapsed_ms,
+            time_ms=0.0,
             homography=match_out.homography,
             inlier_matches=match_out.inlier_matches,
             keypoints_a_objs=feat_a.keypoints,
@@ -96,6 +135,18 @@ class ImageMatcher:
             status="SUCCESS",
             error_message=None,
         )
+
+    @staticmethod
+    def _is_stronger_result(candidate: MatchResult, current: MatchResult) -> bool:
+        """Prefer a fallback only when it improves the model's own evidence."""
+        candidate_rank = {"DIFFERENT": 0, "SIMILAR": 1, "SAME": 2}
+        current_rank = candidate_rank.get(current.band, 0)
+        fallback_rank = candidate_rank.get(candidate.band, 0)
+        if fallback_rank != current_rank:
+            return fallback_rank > current_rank
+        if candidate.confidence != current.confidence:
+            return candidate.confidence > current.confidence
+        return candidate.inliers > current.inliers
 
     @staticmethod
     def _error_result(

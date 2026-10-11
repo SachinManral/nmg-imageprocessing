@@ -17,6 +17,15 @@ from src.visualizer import MatchVisualizer
 
 app = FastAPI(title="Image Matching & Verification REST API")
 
+
+@app.middleware("http")
+async def disable_ui_cache(request, call_next):
+    """Ensure the local dashboard reflects the currently running code."""
+    response = await call_next(request)
+    if request.url.path.startswith("/ui"):
+        response.headers["Cache-Control"] = "no-store"
+    return response
+
 # Enable CORS for decoupled frontend
 app.add_middleware(
     CORSMiddleware,
@@ -75,17 +84,11 @@ def get_presets():
         for p in sorted(query_dir.glob("*.jpg")):
             name_parts = p.stem.split("__")
             raw_label = name_parts[1] if len(name_parts) > 1 else p.stem
-            is_same = "_same" in p.stem
-            is_lookalike = "_lookalike" in p.stem
-            category_tag = "[SAME PIECE]" if is_same else ("[LOOKALIKE SIBLING]" if is_lookalike else "[QUERY]")
-            label = f"{category_tag} {raw_label.replace('_', ' ').title()}"
             queries.append({
                 "id": str(p.relative_to(BASE_DIR)).replace("\\", "/"),
-                "name": label,
+                "name": raw_label.replace("_", " ").title(),
                 "filename": p.name,
                 "preview_url": f"/dataset/queries/{p.name}",
-                "is_same": is_same,
-                "is_lookalike": is_lookalike,
             })
 
     return {"references": references, "queries": queries}
@@ -170,8 +173,6 @@ async def match_endpoint(
                 "visualization": vis_base64,
                 "is_auto_matched": True,
                 "matched_reference_name": best_ref_label,
-                "is_lookalike_pair": False,
-                "lookalike_reason": "",
             }
 
         # CASE 2: Neither image provided
@@ -193,20 +194,6 @@ async def match_endpoint(
                 confidence=result.confidence,
             )
 
-        is_lookalike_pair = False
-        lookalike_reason = ""
-        if path_a and path_b:
-            name_a = path_a.stem.lower()
-            name_b = path_b.stem.lower()
-            if "lookalike" in name_a or "lookalike" in name_b:
-                is_lookalike_pair = True
-                lookalike_reason = (
-                    "Quarry Sibling Lookalike Correctly Rejected: Slabs cut from adjacent block sections "
-                    "share texture and mineral coloring ('family resemblance'), but differing micro-vein "
-                    "geometry confirms they are physically distinct pieces. Rejecting lookalikes ensures "
-                    "zero false acceptances."
-                )
-
         return {
             "status": result.status,
             "band": result.band,
@@ -222,8 +209,6 @@ async def match_endpoint(
             "visualization": vis_base64,
             "is_auto_matched": False,
             "matched_reference_name": None,
-            "is_lookalike_pair": is_lookalike_pair,
-            "lookalike_reason": lookalike_reason,
         }
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
